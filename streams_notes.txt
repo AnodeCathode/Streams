@@ -1,0 +1,81 @@
+
+
+RiverGenerator:
+    #generate:
+        converts the chunk x/z to a river x/z
+        Manages a map of river x/z to generated river structures (caching)
+        passes a world generator copy
+        createStructure()
+        RiverStructure#generate
+        RiverStructure#commit
+    
+    #createStructure:
+        new RiverStructure()
+
+
+RiverStructure : Structure
+
+    #generate:
+        tries to create a mouth component along the entire border of the 16x16 chunk
+        createMouth()
+    
+    #createMouth()
+        new RiverMouthComponent()
+        RiverMouthComponent#isValid -> #addUpstream -> #adjustUpstream
+        
+Structure:
+    
+    .components - a list of RiverComponent
+
+
+RiverMouthComponent : RiverComponent
+
+    #addUpstream:
+        picks a random ModelPlan (8x8 flow map)
+        adds two upstreams - a straight one and a branching one
+        RiverComponent#newUpstreamComponent -> #addUpstream -> #overlay -> #commit
+
+
+RiverUpstreamComponent
+
+    #addUpstream
+        checks a list of candidate upstream ModelPlans
+        pick the high branch and call #addUpstream
+        if the highest valid branch is empty, or the low branch is in a different direction, then try the low branch
+        overlay all branches (max 2) onto the global flow plan
+        widen branches as nessecary
+
+
+RiverComponent
+
+    #newUpstreamComponent
+        new RiverUpstreamComponent()
+        RiverUpstreamComponent#isValid -> return, else None
+    
+    
+Hello fellow modders,
+
+here are some thoughts about Minecraft worldgen mechanics and gotchas, based on my experience making the Streams mod. Comments and corrections are very welcome.
+
+1. Chunk populating
+Chunk populating or decorating refers to the generation of small decorations like trees, ore clusters and ponds of water or lava. Such decorations are smaller than a chunk in area, and must not spill over into neighboring chunks. Doing this would cause the neighboring chunks to be recursively generated, with their own decorations that could spill over, and so on; this is the performance-killing cascading generation Forge tries to warn you about.
+
+Now if decorations were truly restricted to a single chunk, they would form an obvious grid and look fake. So the worldgen algorithm makes a compromise, by generating decorations in a chunk-sized area which sits at the middle of 4 freshly-generated chunks, with the current chunk at the Northwest position (lowest x and z coordinates). This provides an 8-block wide "buffer zone" in which decorations can spill over into neighboring chunks. This is why you will often see code like chunk.x + random.nextInt(16) + 8; if you forget the +8 offset you risk spilling over to the northwest. (And if you make decorations with more than 8-block radiuses such as giant tree canopies, you risk spilling out everywhere.) Note that writing blocks or reading them amounts to the same when it comes to runaway chunk gen; if you're generating something that needs to check blocks around itself you must also be careful not to spill over.
+
+I described such a situation for the original TerraFirmaCraft here, but check out this this detailed reddit post which explains it much better, and has pretty pictures.
+
+As an addition to these explanations, note that a fundamental limitation of Minecraft's infinite worldgen is that chunks cannot know about their ungenerated neighbors. Thus since buffer zones are shared with neighboring "populating zones", we have to accept that any number of decorations may already be present there, if they happened to be generated first. This isn't normally a problem for things like treetops or sand patches which are expected to blend into each other, but if one decoration would block another from appearing (say, a patch of sand vs. trees that look for dirt), there will be some non-determinism involved as the area may look different depending on chunkgen order in a given game.
+
+2. Map Features and Structures
+Map features are large worldgen elements that don't fit into a 2x2 chunk area and are generated and saved as a complete unit. They include "natural" elements such as caves and ravines, as well as Structures such as villages, strongholds and so on. Each feature has a range or "radius" of 8 chunks (in vanilla) which means that when generating a chunk, the game must check a 17-chunk-wide box centered on itself to find all features, centered up to 8 chunks away, that could possibly extend into the chunk. Caves/ravines are fully re-generated each time they're built in a chunk, presumably because it is cheap to do so. Conversely structures are generated once from various semi-randomized components, and then saved in memory and gradually built when populating a chunk that intersects them. They also can take advantage of the chunk-populating "buffer zones", and can risk runaway chunkgen if they overstep it, however it is less likely to be an issue since the full contents of structures are pre-determined and there's no need for them to extend outward to "soften their edges", so to speak.
+
+An important limitation of structures, related to the populating-zone limitation described above, is that they cannot know at generation time what the terrain will be like when they actually get built. Otherwise, examining the terrain in the 8-chunk radius would cause all the checked chunks to actually be generated, and the game would go into an infinite loop as each of these chunks checked an 8-chunk radius around themselves, and so on. This is the reason why villages appear so wonky, with basements extending into ravines and such: because the game doesn't know the exact terrain in advance. (It does know about the biomes though, and can restrict structure generation based on this.) Thus for example, it cannot decide at populating time that a certain chunk is unsuitable to place a house, because it could very well have already placed another part of that house in a neighbouring chunk considered suitable, and then you'd end up with half a house. This also means that structures cannot know if other structures will be generated on top of them. Villages and strongholds work around this by generating far apart, whereas mineshafts don't care about their neighbors at all as I'm sure many of you have observed.
+
+3. Streams Mod
+My own mod Streams uses structures to generate river networks, but those have a unique characteristic not found in vanilla. That's because Streams does need to know about the underlying terrain it generates into, otherwise it wouldn't be able to decide where rivers can start nor confirm that they have a path to a suitable outlet. It accomplishes this by cheating: it creates a copy of the world's chunk generator and uses it to generate the checked chunks in memory and not in the world, with only the raw stone terrain and no structures that would cause recursive generation. It is still bound to the same rule that it cannot know about other structures being generated on top of it, so to avoid weird things like streams crossing each other it partitions the world into 16x16-chunk zones where only a single stream can generate, provided a suitable outlet on the edge of the zone; this is part of the reason why they are so rare.
+
+Another unique feature of Streams is that it generates in the raw terrain, prior to the ground-replacement step where the generator places grass, dirt etc. This is to allow newly-created river valleys to get their proper ground terrain without trying to reproduce what some unknown modded generator would try to put there. (Not even caves and ravines work this way; they are generated after the ground is altered and try to put back grass where it exposed dirt, etc.)
+
+That's about it for now - thanks for reading and again, comments are welcome.
+
+-delvr.
