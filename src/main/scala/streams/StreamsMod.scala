@@ -11,7 +11,7 @@ import streams.block._
 import streams.world.gen.structure.RiverGenerator
 
 /** @author delvr */
-@Mod(modid = "streams", modLanguage = "scala", useMetadata = true)
+@Mod(modid = "streams", modLanguage = "scala", useMetadata = true, dependencies = "after:tfc")
 object StreamsMod extends FarseekBaseMod {
 
     val configuration = None
