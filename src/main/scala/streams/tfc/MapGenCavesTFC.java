@@ -1,311 +1,228 @@
 package streams.tfc;
-
-import com.bioxx.tfc.Core.TFC_Climate;
-import com.bioxx.tfc.Core.TFC_Core;
-import com.bioxx.tfc.WorldGen.DataLayer;
-import com.bioxx.tfc.WorldGen.MapGen.MapGenBaseTFC;
-import com.bioxx.tfc.api.TFCBlocks;
-import net.minecraft.block.Block;
-import net.minecraft.init.Blocks;
-import net.minecraft.util.MathHelper;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.IChunkProvider;
-
 import java.util.Random;
 
-public class MapGenCavesTFC extends MapGenBaseTFC
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.World;
+import net.minecraft.world.chunk.ChunkPrimer;
+import net.minecraft.world.gen.MapGenBase;
+import net.minecraftforge.registries.ForgeRegistry;
+
+import net.dries007.tfc.api.registries.TFCRegistries;
+import net.dries007.tfc.api.types.Rock;
+import net.dries007.tfc.objects.blocks.BlocksTFC;
+import net.dries007.tfc.world.classic.DataLayer;
+
+import static net.dries007.tfc.world.classic.ChunkGenTFC.AIR;
+import static net.dries007.tfc.world.classic.ChunkGenTFC.LAVA;
+
+/**
+ * todo: this is rewritten in 1.14 anyway
+ */
+public class MapGenCavesTFC extends MapGenBase
 {
-	//private byte[] metaArray;
+    private final DataLayer[] stabilityLayer;
+    private int[] rockLayer1;
+    private float rainfall = 0f;
 
-	public void generate(IChunkProvider par1IChunkProvider, World par2World, int par3, int par4, Block[] idsBig, byte[] metaBig)
-	{
-		//metaArray = metaBig;
-		super.generate(par1IChunkProvider, par2World, par3, par4, idsBig);
-	}
-	/**
-	 * Generates a larger initial cave node than usual. Called 25% of the time.
-	 */
-	protected void generateLargeCaveNode(long par1, int par3, int par4, Block[] par5, double par6, double par8, double par10)
-	{
-		this.generateCaveNode(par1, par3, par4, par5, par6, par8, par10, 1.0F + this.rand.nextFloat() * 6.0F, 0.0F, 0.0F, -1, -1, 0.5D, 2.5D);
-	}
+    public MapGenCavesTFC(DataLayer[] stabilityLayer)
+    {
+        this.stabilityLayer = stabilityLayer;
+    }
 
-	/**
-	 * Generates a node in the current cave system recursion tree.
-	 */
-	protected void generateCaveNode(long seed, int chunkX, int chunkZ, Block[] idArray, double i, double j, double k, float par12, float par13, float par14, int par15, int par16, double par17, double width)
-	{
-		double worldX = chunkX * 16 + 8;
-		double worldZ = chunkZ * 16 + 8;
-		float var23 = 0.0F;
-		float var24 = 0.0F;
-		Random var25 = new Random(seed);
+    public void setGenerationData(float rainfall, int[] rockLayer1)
+    {
+        this.rainfall = rainfall;
+        this.rockLayer1 = rockLayer1;
+    }
 
-		if (par16 <= 0)
-		{
-			int var26 = this.range * 16 - 16;
-			par16 = var26 - var25.nextInt(var26 / 4);
-		}
+    @Override
+    protected void recursiveGenerate(World worldIn, int chunkX, int chunkZ, int originalX, int originalZ, ChunkPrimer primer)
+    {
+        int runs = this.rand.nextInt(this.rand.nextInt(this.rand.nextInt(40) + 1) + 1);
+        final int xCoord = chunkX * 16 + this.rand.nextInt(16);
+        final int yCoord = this.rand.nextInt(1 + this.rand.nextInt(140)) + 60;
+        final int zCoord = chunkZ * 16 + this.rand.nextInt(16);
+        final int dlIndex = (zCoord & 15) << 4 | (xCoord & 15);
 
-		boolean var54 = false;
-		if (par15 == -1)
-		{
-			par15 = par16 / 2;
-			var54 = true;
-		}
+        double width = 1.5d + rainfall / 500d;
+        int caveChance = 30 + (int) (rainfall / 50d);
 
-		int var27 = var25.nextInt(par16 / 2) + par16 / 4;
-		for (boolean var28 = var25.nextInt(6) == 0; par15 < par16; ++par15)
-		{
-			float var33 = MathHelper.cos(par14);
-			float var34 = MathHelper.sin(par14);
-			i += MathHelper.cos(par13) * var33;
-			j += var34;
-			k += MathHelper.sin(par13) * var33;
+        width += ((ForgeRegistry<Rock>) TFCRegistries.ROCKS).getValue(rockLayer1[dlIndex]).getRockCategory().getCaveGenMod();
+        runs += ((ForgeRegistry<Rock>) TFCRegistries.ROCKS).getValue(rockLayer1[dlIndex]).getRockCategory().getCaveFreqMod();
 
-			if (var28)
-				par14 *= 0.92F;
-			else
-				par14 *= 0.7F;
+        if (yCoord < 32) width *= 0.5;
+        else if (yCoord < 64) width *= 0.65;
+        else if (yCoord < 96) width *= 0.80;
+        else if (yCoord < 120) width *= 0.90;
+        else width *= 0.5;
 
-			par14 += var24 * 0.1F;
-			par13 += var23 * 0.1F;
-			var24 *= 0.9F;
-			var23 *= 0.75F;
-			var24 += (var25.nextFloat() - var25.nextFloat()) * var25.nextFloat() * 2.0F;
-			var23 += (var25.nextFloat() - var25.nextFloat()) * var25.nextFloat() * 4.0F;
+        if (this.rand.nextInt(8) == 0) width += 1;
+        if (this.rand.nextInt(caveChance) != 0) return;
 
-			if (!var54 && par15 == var27 && par12 > 1.0F && par16 > 0)
-			{
-				this.generateCaveNode(var25.nextLong(), chunkX, chunkZ, idArray, i, j, k, var25.nextFloat() * 0.5F + 0.5F, par13 - ((float)Math.PI / 2F), par14 / 3.0F, par15, par16, 1.0D, width);
-				this.generateCaveNode(var25.nextLong(), chunkX, chunkZ, idArray, i, j, k, var25.nextFloat() * 0.5F + 0.5F, par13 + ((float)Math.PI / 2F), par14 / 3.0F, par15, par16, 1.0D, width);
-				return;
-			}
+        for (int i = 0; i < runs; i++)
+        {
+            int runs2 = 1;
+            if (this.rand.nextInt(4) == 0)
+            {
+                this.generateLargeCaveNode(this.rand.nextLong(), originalX, originalZ, primer, xCoord, yCoord, zCoord);
+                runs2 += this.rand.nextInt(4);
+            }
 
-			double var29 = width + MathHelper.sin(par15 * (float) Math.PI / par16) * par12 * 1.0F;
-			double var31 = var29 * par17;
-			if (var54 || var25.nextInt(4) != 0)
-			{
-				double var35 = i - worldX;
-				double var37 = k - worldZ;
-				double var39 = par16 - par15;
-				double var41 = par12 + 2.0F + 16.0F;
+            for (int j = 0; j < runs2; j++)
+            {
+                float d1 = this.rand.nextFloat() * (float) Math.PI * 2.0F;
+                float d2 = (this.rand.nextFloat() - 0.5F) * 2.0F / 8.0F;
+                float d3 = this.rand.nextFloat() * 2.0F + this.rand.nextFloat();
+                if (this.rand.nextInt(10) == 0) d3 *= this.rand.nextFloat() * this.rand.nextFloat() * 3.0F + 1.0F;
+                this.generateCaveNode(this.rand.nextLong(), originalX, originalZ, primer, xCoord, yCoord, zCoord, d3, d1, d2, 0, 1.0D, width);
+            }
+        }
+    }
 
-				if (var35 * var35 + var37 * var37 - var39 * var39 > var41 * var41)
-					return;
+    /**
+     * Generates a larger initial cave node than usual. Called 25% of the time.
+     */
+    protected void generateLargeCaveNode(long seed, int chunkX, int chunkZ, ChunkPrimer primer, double x, double y, double z)
+    {
+        this.generateCaveNode(seed, chunkX, chunkZ, primer, x, y, z, 1.0F + this.rand.nextFloat() * 6.0F, 0.0F, 0.0F, -1, 0.5D, 2.5D);
+    }
 
-				if (i >= worldX - 16.0D - var29 * 2.0D && k >= worldZ - 16.0D - var29 * 2.0D && i <= worldX + 16.0D + var29 * 2.0D && k <= worldZ + 16.0D + var29 * 2.0D)
-				{
-					int var55 = MathHelper.floor_double(i - var29) - chunkX * 16 - 1;
-					int var36 = MathHelper.floor_double(i + var29) - chunkX * 16 + 1;
-					int var57 = MathHelper.floor_double(j - var31) - 1;
-					int yCoord = MathHelper.floor_double(j + var31) + 1;
-					int var56 = MathHelper.floor_double(k - var29) - chunkZ * 16 - 1;
-					int var40 = MathHelper.floor_double(k + var29) - chunkZ * 16 + 1;
+    /**
+     * Generates a node in the current cave system recursion tree.
+     */
+    protected void generateCaveNode(long seed, int chunkX, int chunkZ, ChunkPrimer primer, double xOffset, double yOffset, double zOffset, float f1, float f2, float f3, int i1, double yRadiusMult, double width)
+    {
+        final Random rng = new Random(seed);
+        final int worldX = chunkX * 16 + 8;
+        final int worldZ = chunkZ * 16 + 8;
+        float lf1 = 0.0F;
+        float lf2 = 0.0F;
 
-					if (var55 < 0)
-						var55 = 0;
+        final int rndRange = (this.range * 16 - 16) - rng.nextInt((this.range * 16 - 16) / 4);
 
-					if (var36 > 16)
-						var36 = 16;
+        boolean onlyOne = false;
+        if (i1 == -1)
+        {
+            i1 = rndRange / 2;
+            onlyOne = true;
+        }
 
-					if (var57 < 1)
-						var57 = 1;
+        final int rndRange2 = rng.nextInt(rndRange / 2) + rndRange / 4;
+        boolean smallRnd = rng.nextInt(6) == 0;
+        outer:
+        for (; i1 < rndRange; ++i1)
+        {
+            float var33 = MathHelper.cos(f3);
+            float var34 = MathHelper.sin(f3);
+            xOffset += MathHelper.cos(f2) * var33;
+            yOffset += var34;
+            zOffset += MathHelper.sin(f2) * var33;
 
-					if (yCoord > 250)
-						yCoord = 250;
+            f3 *= smallRnd ? 0.92F : 0.7F;
+            f3 += lf2 * 0.1F;
+            f2 += lf1 * 0.1F;
+            lf2 *= 0.9F;
+            lf1 *= 0.75F;
+            lf2 += (rng.nextFloat() - rng.nextFloat()) * rng.nextFloat() * 2.0F;
+            lf1 += (rng.nextFloat() - rng.nextFloat()) * rng.nextFloat() * 4.0F;
 
-					if (var56 < 0)
-						var56 = 0;
+            if (!onlyOne && i1 == rndRange2 && f1 > 1.0F && rndRange > 0)
+            {
+                this.generateCaveNode(rng.nextLong(), chunkX, chunkZ, primer, xOffset, yOffset, zOffset, rng.nextFloat() * 0.5F + 0.5F, f2 - ((float) Math.PI / 2F), f3 / 3.0F, i1, 1.0D, width);
+                this.generateCaveNode(rng.nextLong(), chunkX, chunkZ, primer, xOffset, yOffset, zOffset, rng.nextFloat() * 0.5F + 0.5F, f2 + ((float) Math.PI / 2F), f3 / 3.0F, i1, 1.0D, width);
+                return;
+            }
 
-					if (var40 > 16)
-						var40 = 16;
+            double radius = width + MathHelper.sin(i1 * (float) Math.PI / rndRange) * f1 * 1.0F;
+            double yRadius = radius * yRadiusMult;
+            if (onlyOne || rng.nextInt(4) != 0)
+            {
+                final double localXOffset = xOffset - worldX;
+                final double localZOffset = zOffset - worldZ;
+                final double var39 = rndRange - i1;
+                final double var41 = f1 + 2.0F + 16.0F;
 
-					boolean var58 = false;
-					int xCoord;
-					int zCoord;
+                if (localXOffset * localXOffset + localZOffset * localZOffset - var39 * var39 > var41 * var41)
+                    return;
 
-					for (xCoord = var55; !var58 && xCoord < var36; ++xCoord)
-					{
-						for (zCoord = var56; !var58 && zCoord < var40; ++zCoord)
-						{
-							for (int y = yCoord + 1; !var58 && y >= var57 - 1; --y)
-							{
-								int index = (xCoord * 16 + zCoord) * 256 + y;
-								if (y >= 0 && y < 256)
-								{
-                                    //delvr start
-                                    int roofOffset = 1;
-                                    while (TFC_Core.isSoilWAILA(idArray[index+roofOffset])) roofOffset++;
-                                    if (idArray[index + roofOffset] != null && idArray[index + roofOffset].getMaterial().isLiquid())
-                                        var58 = true;
-                                    //delvr end
-									if (y != var57 - 1 && xCoord != var55 && xCoord != var36 - 1 && zCoord != var56 && zCoord != var40 - 1)
-										y = var57;
-								}
-							}
-						}
-					}
+                if (!(xOffset >= worldX - 16.0D - radius * 2.0D) || !(zOffset >= worldZ - 16.0D - radius * 2.0D) || !(xOffset <= worldX + 16.0D + radius * 2.0D) || !(zOffset <= worldZ + 16.0D + radius * 2.0D))
+                    continue;
 
-					if (!var58)
-					{
-						for (xCoord = var55; xCoord < var36; ++xCoord)
-						{
-							double var59 = (xCoord + chunkX * 16 + 0.5D - i) / var29;
-							for (zCoord = var56; zCoord < var40; ++zCoord)
-							{
-								double var46 = (zCoord + chunkZ * 16 + 0.5D - k) / var29;
-								int index = (xCoord * 16 + zCoord) * 256 + yCoord;
-								boolean isGrass = false;
-								Block grassBlock = Blocks.air;
-								if (var59 * var59 + var46 * var46 < 1.0D)
-								{
-									for (int var50 = yCoord - 1; var50 >= var57; --var50)
-									{
-										double var51 = (var50 + 0.5D - j) / var31;
-										if (var51 > -0.7D && var59 * var59 + var51 * var51 + var46 * var46 < 1.0D)
-										{
-											if (TFC_Core.isGrass(idArray[index]))
-											{
-												grassBlock = idArray[index];
-												isGrass = true;
-											}
-											if (TFC_Core.isSoil(idArray[index]) || TFC_Core.isRawStone(idArray[index]))
-											{
-												if(TFC_Core.isSoilOrGravel(idArray[index+1]))
-												{
-													for(int upCount = 1; TFC_Core.isSoilOrGravel(idArray[index+upCount]); upCount++)
-													{idArray[index+upCount] = Blocks.air;}
-												}
+                int initialX = MathHelper.floor(xOffset - radius) - chunkX * 16 - 1;
+                int maxX = MathHelper.floor(xOffset + radius) - chunkX * 16 + 1;
 
-												if (var50 < 10 && TFC_Climate.getStability(this.worldObj, (int)worldX, (int)worldZ) == 1)
-												{
-													idArray[index] = TFCBlocks.lava;
-													//metaArray[index] = 0;
-												}
-												else
-												{
-													idArray[index] = Blocks.air;
-													//metaArray[index] = 0;
-													if (isGrass && TFC_Core.isDirt(idArray[index - 1]))
-													{
-														//int meta = metaArray[index - 1];
-														idArray[index - 1] = grassBlock;
-													}
-												}
-											}
-										}
-										--index;
-									}
-								}
-							}
-						}
-						if (var54)
-							break;
-					}
-				}
-			}
-		}
-	}
+                int minY = MathHelper.floor(yOffset - yRadius) - 1;
+                int initialY = MathHelper.floor(yOffset + yRadius) + 1;
 
-	/**
-	 * Recursively called by generate() (generate) and optionally by itself.
-	 */
-	@Override
-	protected void recursiveGenerate(World world, int par2, int par3, int par4, int par5, Block[] ids)
-	{
-		int var7 = this.rand.nextInt(this.rand.nextInt(this.rand.nextInt(40) + 1) + 1);
-		double xCoord = par2 * 16 + this.rand.nextInt(16);
-		double yCoord = this.rand.nextInt(1 + this.rand.nextInt(140)) + 60;
-		double zCoord = par3 * 16 + this.rand.nextInt(16);
-		float rain = TFC_Climate.getRainfall(world, (int) xCoord, 144, (int) zCoord);
-		double width = 2;
-		int caveChance = 35;
+                int initialZ = MathHelper.floor(zOffset - radius) - chunkZ * 16 - 1;
+                int maxZ = MathHelper.floor(zOffset + radius) - chunkZ * 16 + 1;
 
-		if (rain > 1000)
-		{
-			width += 0.5;
-			caveChance -= 5;
-		}
-		else if (rain > 2000)
-		{
-			width += 1;
-			caveChance -= 10;
-		}
-		else if (rain < 1000)
-		{
-			width -= 0.5;
-			caveChance += 5;
-		}
-		else if (rain < 500)
-		{
-			width -= 1;
-			caveChance += 10;
-		}
-		else if (rain < 250)
-		{
-			width -= 1.25;
-			caveChance += 15;
-		}
+                if (initialX < 0) initialX = 0;
+                if (maxX > 16) maxX = 16;
+                if (minY < 1) minY = 1;
+                if (initialY > 250) initialY = 250;
+                if (initialZ < 0) initialZ = 0;
+                if (maxZ > 16) maxZ = 16;
 
-		if (TFC_Climate.getCacheManager(world) != null)
-		{
-			DataLayer rockLayer1 = TFC_Climate.getCacheManager(world).getRockLayerAt((int)xCoord, (int)zCoord, 0);
-			Block layerID = rockLayer1.block;
-			if(layerID == TFCBlocks.stoneIgEx)
-			{
-				width -= 0.4;
-			}
-			else if(layerID == TFCBlocks.stoneIgIn)
-			{
-				width -= 0.5;
-			}
-			else if(layerID == TFCBlocks.stoneSed)
-			{
-				width += 0.2;
-				var7 += 5;
-			}
-			else if(layerID == TFCBlocks.stoneMM)
-			{
-				width += 0.3;
-			}
-		}
+                for (int xCoord = Math.max(initialX - 1, 0); xCoord < Math.min(maxX + 1, 16); ++xCoord)
+                {
+                    for (int zCoord = Math.max(initialZ - 1, 0); zCoord < Math.min(maxZ + 1, 16); ++zCoord)
+                    {
+                        for (int yCoord = Math.min(initialY + 1, 250); yCoord > Math.max(minY - 1, 0); --yCoord)
+                        {
+                            if (BlocksTFC.isWater(primer.getBlockState(xCoord, yCoord, zCoord)))
+                                continue outer;
+                        }
+                    }
+                }
 
-		if (yCoord < 32)
-			width *= 0.5;
-		else if (yCoord < 64)
-			width *= 0.65;
-		else if (yCoord < 96)
-			width *= 0.80;
-		else if (yCoord < 120)
-			width *= 0.90;
-		else
-			width *= 0.5;
+                for (int xCoord = initialX; xCoord < maxX; ++xCoord)
+                {
+                    final double xDistNorm = (xCoord + chunkX * 16 + 0.5D - xOffset) / radius;
+                    for (int zCoord = initialZ; zCoord < maxZ; ++zCoord)
+                    {
+                        final double zDistNorm = (zCoord + chunkZ * 16 + 0.5D - zOffset) / radius;
+//                            int index = (xCoord * 16 + zCoord) * 256 + initialY;
 
-		if (this.rand.nextInt(8) == 0)
-			width += 1;
+                        if (xDistNorm * xDistNorm + zDistNorm * zDistNorm >= 1.0D)
+                            continue;
 
-		if (this.rand.nextInt(caveChance) != 0)
-			var7 = 0;
+                        IBlockState grass = null;
 
-		for (int var8 = 0; var8 < var7; ++var8)
-		{
-			int var15 = 1;
-			if (this.rand.nextInt(4) == 0)
-			{
-				this.generateLargeCaveNode(this.rand.nextLong(), par4, par5, ids, xCoord, yCoord, zCoord);
-				var15 += this.rand.nextInt(4);
-			}
+                        for (int y = initialY - 1; y >= minY; y--)
+                        {
+                            double yNorm = (y + 0.5D - yOffset) / yRadius;
+                            if (!(yNorm > -0.7D) || !(xDistNorm * xDistNorm + yNorm * yNorm + zDistNorm * zDistNorm < 1.0D))
+                                continue;
 
-			for (int var16 = 0; var16 < var15; ++var16)
-			{
-				float var17 = this.rand.nextFloat() * (float) Math.PI * 2.0F;
-				float var18 = (this.rand.nextFloat() - 0.5F) * 2.0F / 8.0F;
-				float var19 = this.rand.nextFloat() * 2.0F + this.rand.nextFloat();
-				if (this.rand.nextInt(10) == 0)
-					var19 *= this.rand.nextFloat() * this.rand.nextFloat() * 3.0F + 1.0F;
-				this.generateCaveNode(this.rand.nextLong(), par4, par5, ids, xCoord, yCoord, zCoord, var19, var17, var18, 0, 0, 1.0D, width);
-			}
-		}
-	}
+                            final IBlockState current = primer.getBlockState(xCoord, y, zCoord);
+
+                            if (!BlocksTFC.isSoil(current) && !BlocksTFC.isRawStone(current)) continue;
+
+                            if (BlocksTFC.isGrass(current)) grass = primer.getBlockState(xCoord, y, zCoord);
+
+                            for (int upCount = 1; BlocksTFC.isSoilOrGravel(primer.getBlockState(xCoord, y + upCount, zCoord)); upCount++)
+                                primer.setBlockState(xCoord, y + upCount, zCoord, AIR);
+
+
+                            if (y < 20 /* todo make option? was 10*/ && stabilityLayer[(worldZ & 15) << 4 | (worldX & 15)].valueInt == 1)
+                            {
+                                primer.setBlockState(xCoord, y, zCoord, LAVA);
+                            }
+                            else
+                            {
+                                primer.setBlockState(xCoord, y, zCoord, AIR);
+                                if (grass != null && BlocksTFC.isDirt(primer.getBlockState(xCoord, y - 1, zCoord)))
+                                {
+                                    primer.setBlockState(xCoord, y - 1, zCoord, grass);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (onlyOne) break;
+            }
+        }
+    }
 }

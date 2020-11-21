@@ -268,6 +268,17 @@ abstract class RiverComponent(val river: RiverStructure, val boundingBox: Struct
         val yFloor = if(flow) ySurface else adjustedFloorLevel(x, valleyFloor(ySurface, dfs, flow, yGround), z)
         for(y <- yGround until yFloor by -1)
             clearBlockAt(x, y, z)
+
+        if(tfcLoaded && yFloor < yGround) {
+          val xyzFloor = (x, yFloor, z)
+          val exposedBlock = blockAndDataAt(xyzFloor)
+          if(exposedBlock.block.getMaterial.blocksMovement) {
+            val wxz = cs.xzWorld(x, z)
+            val surfaceBlock = tfcSurfaceBlockAt(wxz, blockSetter.worldProvider.worldObj)
+            if(exposedBlock != surfaceBlock)
+              setBlockAndDataAt(xyzFloor, surfaceBlock, notifyNeighbors = false)
+          }
+        }
     }
 
     private def valleyFloor(ySurface: Int, dfs: Int, flow: Boolean, yGround: Int)(implicit bac: IBlockAccess) = {
